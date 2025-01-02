@@ -1,0 +1,19 @@
+.sortSelect {
+  width: 25%;
+
+  padding: 0.35rem 0.1rem;
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: border-color 0.3s;
+
+  &:focus {
+    border-color: #007bff;
+    outline: none;
+  }
+
+  @media (min-width: 480px) {
+    font-size: 1.25rem;
+  }
+}

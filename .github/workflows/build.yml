@@ -1,0 +1,32 @@
+name: Build
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+env:
+  DATABASE_URL: postgres://pets:pets@localhost:5432/pets
+  REDIS_URL: redis://localhost:6379
+  API_BASE_URL: http://localhost:8000
+  S3_ASSETS_BUCKET: pets-api-staging-assets
+  S3_ASSETS_REGION: eu-west-2
+  S3_ASSETS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  S3_ASSETS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+jobs:
+  build:
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Build
+        uses: ./.github/actions/build

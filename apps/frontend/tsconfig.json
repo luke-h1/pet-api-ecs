@@ -1,0 +1,38 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "isolatedModules": true,
+    "module": "ESNext",
+    "lib": [
+      "dom",
+      "DOM.iterable",
+      "esnext"
+    ],
+    "incremental": true,
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@frontend/*": [
+        "./src/*"
+      ],
+      "@validation/*": [
+        "../../packages/validation/src/*"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "test",
+    "next-env.d.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}

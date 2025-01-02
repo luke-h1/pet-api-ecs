@@ -1,0 +1,23 @@
+{
+  "name": "e2e-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "e2e:local": "make e2e-local",
+    "start-server": "pnpm --filter @pets/api start",
+    "tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pets/validation": "workspace:*",
+    "@playwright/test": "^1.48.2"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@faker-js/faker": "^8.4.1",
+    "@types/uuid": "^10.0.0",
+    "uuid": "^10.0.0"
+  }
+}

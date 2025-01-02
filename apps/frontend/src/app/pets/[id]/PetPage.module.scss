@@ -1,0 +1,35 @@
+.container {
+  padding: 1rem;
+}
+
+.heading {
+  font-weight: bold;
+  font-size: 2rem;
+}
+
+.subheading {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.imageGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 0.5rem;
+}
+
+.imageContainer {
+  margin-right: 0.5rem;
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  border-radius: 0.5rem;
+  object-fit: cover;
+}
+
+.description {
+  font-size: 1.375rem;
+  margin-top: 0.75rem;
+}

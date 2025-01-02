@@ -1,0 +1,70 @@
+name: destroy
+on:
+  workflow_dispatch:
+env:
+  TERRAFORM_ROOT: terraform
+  DOCKER_ENV: production
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  TF_VAR_env: test
+  TF_VAR_redis_url: ${{ secrets.REDIS_URL }}
+  TF_VAR_api_base_url: 'pets-staging.lhowsam.com'
+  TF_VAR_session_secret: ${{ secrets.SESSION_SECRET }}
+  TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
+  TF_VAR_deployed_by: ${{ github.actor }}
+  TF_VAR_deployed_at: ${{ github.actor }}
+  TF_VAR_private_key: ${{ secrets.STG_PRIVATE_KEY }}
+  TF_VAR_certificate_body: ${{ secrets.STG_CERT_BODY }}
+  TF_VAR_certificate_chain: ${{ secrets.CERTIFICATE_CHAIN }}
+  TF_VAR_zone_id: ${{ secrets.ZONE_ID }}
+  TF_VAR_docker_image_tag: ${{ github.sha }}
+
+  TF_VAR_s3_assets_bucket: pets-api-staging-assets
+  TF_VAR_s3_assets_region: eu-west-2
+  TF_VAR_s3_assets_access_key_id: ${{ secrets.ASSETS_KEY }}
+  TF_VAR_s3_assets_secret_access_key: ${{ secrets.ASSETS_SECRET }}
+  TF_VAR_git_sha: 1
+jobs:
+  destroy-infra:
+    name: destroy infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install moreutils
+        run: sudo apt install moreutils
+
+      # https://github.com/actions/virtual-environments/issues/1187
+      - name: tune linux network
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init -backend-config="key=vpc/${{ env.TF_VAR_env }}.tfstate" -backend-config="bucket=pets-api-${{ env.TF_VAR_env }}-terraform-state" -input=false
+
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+
+      - name: Terraform destroy
+        id: destroy
+        run: terraform destroy --auto-approve
+        working-directory: ${{ env.TERRAFORM_ROOT }}

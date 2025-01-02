@@ -1,0 +1,70 @@
+{
+  "name": "root",
+  "private": true,
+  "version": "0.0.0-monorepo",
+  "description": "Pets API monorepo",
+  "packageManager": "pnpm@9.7.0",
+  "engines": {
+    "pnpm": "9.7.0",
+    "node": "20.11.0"
+  },
+  "scripts": {
+    "alphabetize": "node scripts/alphabetize.js",
+    "build": "pnpm -r --parallel --aggregate-output --reporter=append-only --no-bail build",
+    "check:node": "check-node-version --package",
+    "clean": "pnpm -r --parallel exec rm -rf node_modules && rm -rf node_modules",
+    "commit": "cz",
+    "format": "prettier --write \"{apps,packages}/**/*.{js,jsx,ts,tsx,css,scss,html}\"",
+    "format:check": "prettier --list-different \"{apps, packages}/**/*.{js,jsx,ts,tsx,css,scss,html}\"",
+    "lint": "eslint --fix --ext .ts,.tsx,.js,.jsx .",
+    "preinstall": "pnpm check:node",
+    "test": "pnpm -r --no-bail test",
+    "test:ci": "pnpm -r --no-bail --aggregate-output --reporter=append-only test:ci",
+    "test:snapshot": "pnpm -r --no-bail test:snapshot",
+    "tsc": "pnpm -r --aggregate-output --reporter=append-only --no-bail tsc"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
+    "@types/node": "^20.8.6",
+    "@typescript-eslint/eslint-plugin": "^7.14.1",
+    "@typescript-eslint/parser": "^7.14.1",
+    "check-node-version": "^4.2.1",
+    "commitizen": "4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
+    "eslint": "^8.52.0",
+    "eslint-config-airbnb": "^19.0.4",
+    "eslint-config-next": "14.2.8",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.31.0",
+    "git-cz": "^4.9.0",
+    "husky": "^9.1.6",
+    "lint-staged": "15.2.10",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,css,scss,html}": [
+      "prettier --write"
+    ],
+    "*.{ts,tsx,js,jsx}": [
+      "eslint"
+    ],
+    "package.json": [
+      "node scripts/alphabetize.js"
+    ],
+    "*.tf": [
+      "terraform fmt"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "prepare-commit-msg": "exec < /dev/tty && npx cz --hook || true"
+    }
+  }
+}

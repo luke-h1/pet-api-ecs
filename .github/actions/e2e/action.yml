@@ -1,0 +1,51 @@
+name: e2e tests
+description: Run e2e tests
+inputs:
+  target:
+    description: 'make target to execute'
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Get installed Playwright version
+      id: playwright-version
+      run: echo "PLAYWRIGHT_VERSION=$(node -e "console.log(require('./apps/api/package.json').devDependencies['@playwright/test'])")" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Cache playwright binaries
+      uses: actions/cache@v3
+      id: playwright-cache
+      with:
+        path: |
+          ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}
+
+    - name: Install browsers
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      run: make e2e-install-browsers
+      working-directory: packages/e2e-server
+      shell: bash
+
+    - name: ${{ inputs.environment }} UI tests
+      if: inputs.target == 'e2e-local'
+      run: pnpm build
+      working-directory: apps/api
+      shell: bash
+
+    - name: setup e2e DB
+      if: inputs.target == 'e2e-local'
+      run: ./scripts/setup-e2edb.sh
+      working-directory: apps/api
+      shell: bash
+
+    - name: ${{ inputs.environment }} UI tests
+      if: inputs.target == 'e2e-local'
+      run: pnpx start-server-and-test start-server 8000 e2e:local
+      working-directory: packages/e2e-server
+      shell: bash
+
+    - name: ${{ inputs.environment }} UI tests
+      if: inputs.target != 'e2e-local'
+      run: make ${{ inputs.target }}
+      working-directory: packages/e2e-server
+      shell: bash

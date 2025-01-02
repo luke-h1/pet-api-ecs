@@ -1,0 +1,27 @@
+enum PetStatus {
+  AVAILABLE
+  PENDING
+  ADOPTED
+}
+
+model Pet {
+  id          String    @id @default(uuid())
+  name        String
+  description String
+
+  // string because it could be weeks, months, years etc.
+  age         String
+  breed       String
+  status      PetStatus @default(AVAILABLE)
+  birthDate   String
+  tags        String[]
+  images      String[]
+
+  creatorId String
+  creator   User     @relation(fields: [creatorId], references: [id]) 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([creatorId])
+  @@map("pets")
+}

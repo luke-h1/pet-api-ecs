@@ -1,0 +1,46 @@
+name: 'Build'
+description: 'Build'
+runs:
+  using: 'composite'
+  steps:
+    - name: install
+      uses: ./.github/actions/install
+
+    - name: Check commit message
+      run: pnpm commitlint --from=HEAD^1
+      shell: bash
+
+    - name: format:check
+      run: pnpm format:check
+      shell: bash
+
+    - name: lint
+      run: pnpm lint
+      shell: bash
+
+    - name: start test DB
+      run: docker compose up -d
+      working-directory: apps/api
+      shell: bash
+
+    - name: jest
+      run: pnpm test:ci
+      shell: bash
+
+    - name: tsc
+      run: pnpm tsc
+      shell: bash
+
+    - name: build
+      run: pnpm build
+      shell: bash
+
+    - name: e2e local server
+      uses: ./.github/actions/e2e
+      with:
+        target: e2e-local
+
+    - name: docker compose down
+      working-directory: apps/api
+      run: docker compose down
+      shell: bash

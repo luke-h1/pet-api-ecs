@@ -1,0 +1,98 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "extends": [
+    "airbnb",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:import/typescript",
+    "plugin:@typescript-eslint/strict",
+    "plugin:react/recommended",
+    "plugin:react-hooks/recommended",
+    "prettier",
+    "prettier/prettier"
+  ],
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "project": "./tsconfig.json"
+      }
+    },
+    "react": {
+      "version": "detect"
+    }
+  },
+  "plugins": ["@typescript-eslint"],
+  "env": {
+    "browser": true,
+    "jest": true,
+    "node": true
+  },
+  "rules": {
+    "react/jsx-filename-extension": [
+      2,
+      { "extensions": [".js", ".jsx", ".ts", ".tsx"] }
+    ],
+    "@typescript-eslint/no-use-before-define": [
+      "error",
+      {
+        "functions": false
+      }
+    ],
+    "import/no-unresolved": ["error"],
+    "import/order": [
+      "error",
+      {
+        "groups": [
+          ["builtin", "external", "internal"],
+          "parent",
+          "sibling",
+          "index"
+        ],
+        "alphabetize": {
+          "order": "asc"
+        }
+      }
+    ],
+    "import/prefer-default-export": "off",
+    "react/jsx-props-no-spreading": "off",
+    "class-methods-use-this": "off",
+    "react/react-in-jsx-scope": "off",
+    "import/extensions": "off",
+    "no-unsafe-finally": "off",
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      { "argsIgnorePattern": "^_$" }
+    ],
+    "no-underscore-dangle": [
+      "error",
+      {
+        "allow": ["key", "_type", "_rev", "_id"]
+      }
+    ],
+    "no-use-before-define": "off",
+    "react/require-default-props": "off",
+    "@typescript-eslint/ban-types": "off",
+    "no-case-declarations": "error",
+    "import/no-extraneous-dependencies": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.js"],
+      "rules": {
+        "@typescript-eslint/no-var-requires": "off",
+        "global-require": "off",
+        "import/no-dynamic-require": "off",
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["./apps/frontend/src"],
+      "settings": {
+        "next": {
+          "rootDir": "./apps/frontend/src"
+        }
+      },
+      "extends": ["plugin:@next/next/recommended"]
+    }
+  ]
+}

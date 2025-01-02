@@ -1,0 +1,319 @@
+name: Deploy to staging AWS
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+env:
+  TERRAFORM_ROOT: terraform
+  DOCKER_ENV: production
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  TF_VAR_env: staging
+  TF_VAR_redis_url: ${{ secrets.REDIS_URL }}
+  TF_VAR_api_base_url: 'pets-staging.lhowsam.com'
+  TF_VAR_session_secret: ${{ secrets.SESSION_SECRET }}
+  TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
+  TF_VAR_deployed_by: ${{ github.actor }}
+  TF_VAR_private_key: ${{ secrets.STG_PRIVATE_KEY }}
+  TF_VAR_certificate_body: ${{ secrets.STG_CERT_BODY }}
+  TF_VAR_certificate_chain: ${{ secrets.CERTIFICATE_CHAIN }}
+  TF_VAR_zone_id: ${{ secrets.ZONE_ID }}
+  TF_VAR_docker_image_tag: ${{ github.sha }}
+  TF_VAR_s3_assets_bucket: pets-api-staging-assets
+  TF_VAR_s3_assets_region: eu-west-2
+  TF_VAR_s3_assets_access_key_id: ${{ secrets.ASSETS_KEY }}
+  TF_VAR_s3_assets_secret_access_key: ${{ secrets.ASSETS_SECRET }}
+  TF_VAR_git_sha: ${{ github.sha }}
+  TF_VAR_session_domain: pets-staging.lhowsam.com
+
+  # needed for tests
+  S3_ASSETS_BUCKET: pets-api-staging-assets
+  S3_ASSETS_REGION: eu-west-2
+  S3_ASSETS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  S3_ASSETS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  DATABASE_URL: postgres://pets:pets@localhost:5432/pets
+  REDIS_URL: redis://localhost:6379
+  API_BASE_URL: http://localhost:8000
+
+jobs:
+  provision-ecr:
+    name: Provision ECR repository if needed
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-group
+      cancel-in-progress: true
+    timeout-minutes: 10
+    steps:
+      - name: Install moreutils
+        run: sudo apt install moreutils
+
+      # https://github.com/actions/virtual-environments/issues/1187
+      - name: tune linux network
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+          mask-aws-account-id: true
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform init
+        id: init
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+        run: |
+          terraform init -backend-config="key=vpc/${{ env.TF_VAR_env }}.tfstate" -backend-config="bucket=pets-api-${{ env.TF_VAR_env }}-terraform-state" -input=false
+
+      - name: Terraform fmt -check
+        id: fmt
+        run: terraform fmt -check
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+
+      - name: Terraform validate
+        id: validate
+        run: terraform validate
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+
+      - name: Terraform plan (ECR repo)
+        id: plan
+        run: |
+          terraform plan \
+          -target=aws_ecr_repository.ecr_repo \
+          -out ./app.out
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+
+      - name: Terraform apply (ECR repo)
+        id: apply
+        run: terraform apply -auto-approve ./app.out
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+
+  build:
+    name: Build server
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: provision-ecr
+    concurrency:
+      group: deploy-build-group
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: install
+        uses: ./.github/actions/install
+
+      - name: build
+        uses: ./.github/actions/build
+
+  build-and-push-docker:
+    name: Build and push Docker image
+    needs: [provision-ecr, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-docker-group
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+          mask-aws-account-id: true
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.1.8
+          terraform_wrapper: false
+
+      - name: Terraform init
+        id: init
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+        run: |
+          terraform init -backend-config="key=vpc/${{ env.TF_VAR_env }}.tfstate" -backend-config="bucket=pets-api-${{ env.TF_VAR_env }}-terraform-state" -input=false
+
+      - name: terraform plan
+        id: plan
+        run: terraform plan -out ./app.out
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+
+      - name: Output terraform variables to file
+        id: output
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+        run: terraform output -json > ../terraform-outputs.json
+
+      - name: Set variables from terraform outputs
+        run: |
+          outputs=$(cat terraform-outputs.json)
+          ecr_repo_name=$(echo $outputs | jq -r .ecr_repo_name.value)
+          echo "ECR_REPO_NAME=$ecr_repo_name" >> $GITHUB_ENV
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: build, tag and push image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ env.ECR_REPO_NAME }}
+        run: |
+          docker build \
+           --build-arg NODE_ENV=${{ env.DOCKER_ENV }} \
+           -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.TF_VAR_docker_image_tag }} -f docker/api/Dockerfile .
+           docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.TF_VAR_docker_image_tag }}
+
+  # get-current-version:
+  #   name: Get current API version
+  #   needs: [build-and-push-docker]
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 5
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #         ref: ${{ github.head_ref }}
+
+  #     - name: Get current version
+  #       run: |
+  #         response=$(curl -s https://pets-staging.lhowsam.com/api/version)
+  #         echo "Response: $response"
+  #         gitSha=$(echo $response | jq -r '.gitSha')
+  #         echo "gitSha: $gitSha"
+  #         echo "GIT_SHA=$gitSha" >> $GITHUB_ENV
+
+  migrate-db:
+    name: Migrate database
+    needs: [build-and-push-docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-migratedb-group
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: install
+        uses: ./.github/actions/install
+
+      - name: Migrate database
+        run: DATABASE_URL=${{ secrets.DATABASE_URL }} pnpm db:migrate-prod
+        working-directory: apps/api
+
+  deploy-infra:
+    name: Deploy infrastructure
+    needs: [build-and-push-docker, migrate-db]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-infra-group
+    steps:
+      - name: Install moreutils
+        run: sudo apt install moreutils
+
+      # https://github.com/actions/virtual-environments/issues/1187
+      - name: tune linux network
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init
+        id: init
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+        run: terraform init -backend-config="key=vpc/${{ env.TF_VAR_env }}.tfstate" -backend-config="bucket=pets-api-${{ env.TF_VAR_env }}-terraform-state" -input=false
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+        run: |
+          terraform plan \
+          -out ./app.out
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply ./app.out
+        working-directory: ${{ env.TERRAFORM_ROOT }}
+
+      # staging-e2e:
+      #   name: Staging e2e tests
+      #   needs: [get-current-version, deploy-infra]
+      #   runs-on: ubuntu-latest
+      #   timeout-minutes: 15
+      #   steps:
+      #     - name: Install moreutils
+      #       run: sudo apt install moreutils
+
+      #     # https://github.com/actions/virtual-environments/issues/1187
+      #     - name: tune linux network
+      #       run: sudo ethtool -K eth0 tx off rx off
+
+      #     - name: Checkout repository
+      #       uses: actions/checkout@v4
+      #       with:
+      #         fetch-depth: 0
+      #         ref: ${{ github.head_ref }}
+
+      #     - name: Check for new version
+      #       id: check_version
+      #       run: |
+      #         while true; do
+      #           response=$(curl -s https://pets-staging.lhowsam.com/api/version)
+      #           echo "Response: $response"
+      #           newGitSha=$(echo $response | jq -r '.gitSha')
+      #           echo "newGitSha: $newGitSha"
+      #           if [ "$newGitSha" != "${{ env.GIT_SHA }}" ]; then
+      #             echo "New version detected: $newGitSha"
+      #             echo "NEW_GIT_SHA=$newGitSha" >> $GITHUB_ENV
+      #             echo "running e2e tests"
+      #             break
+      #           fi
+      #           echo "No new version detected. Retrying in 5 seconds..."
+      #           sleep 5
+      #         done
+
+      # - name: e2e staging
+      #   uses: ./.github/actions/e2e
+      #   with:
+      #     target: e2e-staging

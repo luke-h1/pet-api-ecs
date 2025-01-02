@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "noEmit": false,
+    "baseUrl": ".",
+    "declaration": true,
+    "paths": {
+      "@api/*": ["./src/*"],
+      "@validation/*": ["../validation/src/*"]
+    }
+  },
+  "include": ["e2e"],
+  "exclude": ["node_modules"]
+}

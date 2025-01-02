@@ -1,0 +1,38 @@
+name: Deploy to staging (fly.io & cloudflare pages)
+on:
+  workflow_dispatch:
+env:
+  DATABASE_URL: postgres://pets:pets@localhost:5432/pets
+  S3_ASSETS_BUCKET: pets-api-staging-assets
+  S3_ASSETS_REGION: eu-west-2
+  S3_ASSETS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  S3_ASSETS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  NR_APP_NAME: ${{ secrets.NR_APP_NAME }}
+  NR_LICENSE_KEY: ${{ secrets.NR_LICENSE_KEY }}
+  REDIS_URL: redis://localhost:6379
+  API_BASE_URL: http://localhost:8000
+jobs:
+  deploy:
+    name: Deploy API
+    runs-on: ubuntu-latest
+    concurrency: deploy-group
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Build
+        uses: ./.github/actions/build
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: |
+          flyctl deploy --dockerfile docker/api/Dockerfile --config fly.toml --push --build-arg GIT_SHA=${{ github.sha }} --build-arg DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ") --build-arg DEPLOYED_BY=${{ github.actor }} --build-arg NEW_RELIC_APP_NAME=${{ env.NR_APP_NAME }} --build-arg NEW_RELIC_LICENSE_KEY=${{ env.NR_LICENSE_KEY }} --build-arg NEW_RELIC_APPLICATION_LOGGING_FORWARDING_ENABLED=true
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: e2e staging
+        uses: ./.github/actions/e2e
+        with:
+          target: e2e-staging
