@@ -1,8 +1,6 @@
 name: e2e-staging
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 */12 * * *'
 env:
   DATABASE_URL: postgres://pets:pets@localhost:5432/pets
   REDIS_URL: redis://localhost:6379
